@@ -27,18 +27,13 @@ object PDFUtil {
 
             val scale = pageCopy.width / disWidth
 
-            println("scale:${pageCopy.width / disWidth}")
             paths.forEach { item ->
                 if (item.bottom * scale - totalHeight >= 0 && item.top * scale - totalHeight <= pageHeight) {
-                    if (item.isClean) {
-                        canvas.clip()
-                    } else {
-                        canvas.setStrokeColorRgb(
-                            item.color.red,
-                            item.color.green,
-                            item.color.blue
-                        )
-                    }
+                    canvas.setStrokeColorRgb(
+                        item.color.red,
+                        item.color.green,
+                        item.color.blue
+                    )
                     canvas.setLineWidth(item.width * scale)
                     if (item.positions.isNotEmpty()) {
                         canvas.moveTo(
@@ -53,11 +48,7 @@ object PDFUtil {
                             )
                         }
                     }
-                    if (item.isClean) {
-                        canvas.clip()
-                    } else {
-                        canvas.stroke()
-                    }
+                    canvas.stroke()
                 }
             }
             totalHeight += pageHeight

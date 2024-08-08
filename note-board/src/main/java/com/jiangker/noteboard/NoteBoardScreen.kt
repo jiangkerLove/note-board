@@ -1,7 +1,6 @@
 package com.jiangker.noteboard
 
 import android.annotation.SuppressLint
-import android.util.Xml
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -52,6 +51,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.barteksc.pdfviewer.PDFView
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Composable
@@ -79,6 +80,12 @@ interface NoteBoardScreenState {
 @SuppressLint("ResourceType")
 @Composable
 fun NoteBoardScreen(
+    onPathDown: (Color, Float) -> Unit,
+    onPathMove: (Offset) -> Unit,
+    onPathUp: (PathItem) -> Unit,
+    onClean: () -> Unit,
+    onEraser: (List<String>) -> Unit,
+    paths: List<PathItem>,
     noteState: NoteBoardScreenState,
     content: @Composable BoxScope.(Modifier) -> Unit
 ) {
@@ -88,7 +95,6 @@ fun NoteBoardScreen(
     var isFirstMove = false
     var paintId by remember { mutableStateOf<PointerId?>(null) }
 
-    val paths = remember { mutableStateListOf<PathItem>() }
     var pathColor by remember { mutableStateOf(Color.Red) }
     var pathWidth by remember { mutableFloatStateOf(5F) }
     var isClean by remember { mutableStateOf(false) }
@@ -107,6 +113,8 @@ fun NoteBoardScreen(
                                     isFirstMove = true
                                     path.clear()
                                     paintId = pointerEvent.changes.first().id
+                                    if (isClean.not())
+                                        onPathDown(pathColor, pathWidth)
                                 }
                             }
 
@@ -137,27 +145,39 @@ fun NoteBoardScreen(
                                         (it.position.x - noteState.offsetX) / noteState.scale,
                                         (it.position.y - noteState.offsetY) / noteState.scale
                                     )
-                                    path.add(offset)
-                                    if (isClean) {
-                                        val newList = paths
-                                            .filter { item ->
-                                                pathSegment(path.last(), item.positions).not()
-                                            }
-                                            .toList()
-                                        paths.clear()
-                                        paths.addAll(newList)
+                                    if (isClean.not()) {
+                                        onPathMove(offset)
                                     }
+                                    path.add(offset)
                                 }
                             if (pointerEvent.type == PointerEventType.Release && pointerEvent.changes.size == 1) {
-                                if (path.isNotEmpty() && isClean.not())
-                                    paths.add(
-                                        PathItem(
-                                            color = pathColor,
-                                            width = pathWidth,
-                                            path.toList(),
-                                            isClean = isClean
+                                if (path.isNotEmpty())
+                                    if (isClean) {
+                                        val offsetY = noteState.offsetY / noteState.scale
+                                        if (path.size > 2) {
+                                            val itemList = paths
+                                                .filter { item ->
+                                                    item.bottom + offsetY >= 0 && item.top + offsetY <= boxRect.height &&
+                                                            inCleanSpace(
+                                                                path.first(),
+                                                                path.last(),
+                                                                item.positions
+                                                            )
+                                                }
+                                                .map { it.id }
+                                                .toList()
+                                            onEraser(itemList)
+                                        }
+                                    } else {
+                                        onPathUp(
+                                            PathItem(
+                                                id = "",
+                                                color = pathColor,
+                                                width = pathWidth,
+                                                path.toList(),
+                                            )
                                         )
-                                    )
+                                    }
                                 path.clear()
                                 paintId = null
                             }
@@ -188,22 +208,16 @@ fun NoteBoardScreen(
                     paths.forEach { item ->
                         if (item.bottom + offsetY >= 0 && item.top + offsetY <= boxRect.height)
                             it.drawPathWithOffset(
-                                offsetX,
-                                offsetY,
                                 item.color,
                                 item.width,
-                                item.positions,
-                                item.isClean
+                                item.positions
                             )
                     }
                     if (isClean.not()) {
                         it.drawPathWithOffset(
-                            offsetX,
-                            offsetY,
                             pathColor,
                             pathWidth,
                             path,
-                            isClean
                         )
                     } else {
                         if (path.size > 1) {
@@ -228,7 +242,7 @@ fun NoteBoardScreen(
         ) {
             Column(
                 modifier = Modifier.clickable {
-                    paths.clear()
+                    onClean()
                 }
             ) {
                 Image(
@@ -280,7 +294,7 @@ fun NoteBoardScreen(
                 }
             ) {
                 Image(
-                    painter = painterResource(id = if (isClean) R.drawable.ic_clean_select else R.drawable.ic_clean),
+                    painter = painterResource(id = if (isClean) R.drawable.ic_eraser_select else R.drawable.ic_eraser),
                     contentDescription = null
                 )
                 Text(text = "橡皮", modifier = Modifier, fontSize = 12.sp, color = Color.White)
@@ -292,7 +306,7 @@ fun NoteBoardScreen(
                 }
             ) {
                 Image(
-                    painter = painterResource(id = if (isClean) R.drawable.ic_clean else R.drawable.ic_clean_select),
+                    painter = painterResource(id = if (isClean) R.drawable.ic_pen else R.drawable.ic_pen_select),
                     contentDescription = null
                 )
                 Text(text = "画笔", modifier = Modifier, fontSize = 12.sp, color = Color.White)
@@ -300,11 +314,15 @@ fun NoteBoardScreen(
             Spacer(modifier = Modifier.width(20.dp))
             Column(
                 modifier = Modifier.clickable {
-                    PDFUtil.write(basePath = context.filesDir.path, boxRect.width.roundToInt(), paths)
+                    PDFUtil.write(
+                        basePath = context.filesDir.path,
+                        boxRect.width.roundToInt(),
+                        paths
+                    )
                 }
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.ic_clean),
+                    painter = painterResource(id = R.drawable.ic_save),
                     contentDescription = null
                 )
                 Text(text = "保存", modifier = Modifier, fontSize = 12.sp, color = Color.White)
@@ -360,12 +378,9 @@ fun NoteBoardScreen(
 
 
 private fun Canvas.drawPathWithOffset(
-    offsetX: Float,
-    offsetY: Float,
     color: Color,
     width: Float,
     path: List<Offset>,
-    isClean: Boolean,
 ) {
     if (path.isNotEmpty()) {
         val drawPath = Path()
@@ -381,7 +396,7 @@ private fun Canvas.drawPathWithOffset(
         paint.color = color
         paint.style = PaintingStyle.Stroke
         paint.strokeWidth = width
-        paint.blendMode = if (isClean) BlendMode.DstOut else BlendMode.SrcOver
+        paint.blendMode = BlendMode.SrcOver
         drawPath(
             drawPath,
             paint
@@ -389,45 +404,14 @@ private fun Canvas.drawPathWithOffset(
     }
 }
 
-fun pathSegment(offset: Offset, path: List<Offset>): Boolean {
+fun inCleanSpace(leftTop: Offset, endBottom: Offset, path: List<Offset>): Boolean {
+    val minX = min(leftTop.x, endBottom.x)
+    val minY = min(leftTop.y, endBottom.y)
+    val maxX = max(leftTop.x, endBottom.x)
+    val maxY = max(leftTop.y, endBottom.y)
     path.forEach {
-        val distance = (it - offset).getDistance()
-        println(distance)
-        if (distance < 1F) return true
+        if (it.x > minX && it.y > minY && it.x < maxX && it.y < maxY)
+            return true
     }
     return false
-}
-
-const val EPSILON = 0.5F; // 设定一个小的容差值
-fun doLineSegmentsIntersect(startA: Offset, endA: Offset, startB: Offset, endB: Offset): Boolean {
-
-    // 计算四个方向值
-    val d1 = direction(startB, endB, startA);
-    val d2 = direction(startB, endB, endA);
-    val d3 = direction(startA, endA, startB);
-    val d4 = direction(startA, endA, endB);
-
-    // 检查是否相交
-    if (d1 * d2 < -EPSILON && d3 * d4 < -EPSILON) {
-        return true;
-    }
-
-    // 检查是否在边界上
-    if (Math.abs(d1) < EPSILON && onSegment(startB, endB, startA, EPSILON)) return true;
-    if (Math.abs(d2) < EPSILON && onSegment(startB, endB, endA, EPSILON)) return true;
-    if (Math.abs(d3) < EPSILON && onSegment(startA, endA, startB, EPSILON)) return true;
-    if (Math.abs(d4) < EPSILON && onSegment(startA, endA, endB, EPSILON)) return true;
-
-    return false;
-}
-
-// 计算方向值
-fun direction(p: Offset, q: Offset, r: Offset): Float {
-    return (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
-}
-
-// 检查点是否在线段上
-fun onSegment(p: Offset, q: Offset, r: Offset, epsilon: Float): Boolean {
-    return Math.min(p.x, q.x) - epsilon <= r.x && r.x <= Math.max(p.x, q.x) + epsilon &&
-            Math.min(p.y, q.y) - epsilon <= r.y && r.y <= Math.max(p.y, q.y) + epsilon;
 }
