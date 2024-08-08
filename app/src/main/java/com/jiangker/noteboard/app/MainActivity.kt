@@ -11,8 +11,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -23,6 +26,8 @@ import com.jiangker.noteboard.NoteBoardScreen
 import com.jiangker.noteboard.NoteElement
 import com.jiangker.noteboard.NoteOperation
 import com.jiangker.noteboard.NoteSource
+import com.jiangker.noteboard.OptionConfig
+import com.jiangker.noteboard.OptionScreen
 import com.jiangker.noteboard.PDFScreen
 import com.jiangker.noteboard.PathItem
 import com.jiangker.noteboard.Pos
@@ -42,6 +47,15 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
 
                 val paths = remember { mutableStateListOf<PathItem>() }
+                var optionConfig by remember {
+                    mutableStateOf(
+                        OptionConfig(
+                            color = Color.Red,
+                            width = 5F,
+                            isClean = false
+                        )
+                    )
+                }
                 var currentOpt: NoteOperation? = null
 
                 val pdfView = remember {
@@ -127,6 +141,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     NoteBoardScreen(
+                        config = optionConfig,
                         onPathDown = { color, fl ->
                             currentOpt = NoteOperation.AddElement(
                                 id = System.currentTimeMillis().toString(),
@@ -161,16 +176,6 @@ class MainActivity : ComponentActivity() {
                                 paths.add(it.copy(id = currentOpt!!.id))
                             }
                         },
-                        onClean = {
-                            synchronized(MainActivity::class) {
-                                paths.clear()
-                                RsyncSocket.rsyncItem(
-                                    NoteOperation.CleanElement(
-                                        id = System.currentTimeMillis().toString()
-                                    )
-                                )
-                            }
-                        },
                         onEraser = { list ->
                             synchronized(MainActivity::class) {
                                 list.forEach {
@@ -183,14 +188,34 @@ class MainActivity : ComponentActivity() {
                                 paths.addAll(itemList)
                             }
                         },
-                        paths,
+                        paths = paths,
                         noteState = rememberNoteBoardScreenState(pdfView),
+                        content = {
+                            PDFScreen(
+                                modifier = it.fillMaxSize(),
+                                pdfView = pdfView,
+                                noteSource = NoteSource.File(this@MainActivity.filesDir.path + "/api.pdf")
+                            )
+                        }
                     ) {
-                        PDFScreen(
-                            modifier = it.fillMaxSize(),
-                            pdfView = pdfView,
-                            noteSource = NoteSource.File(this@MainActivity.filesDir.path + "/api.pdf")
-                        )
+                        OptionScreen(
+                            config = optionConfig,
+                            onCleanChanged = {
+                                optionConfig = optionConfig.copy(isClean = it)
+                            }, onClean = {
+                                synchronized(MainActivity::class) {
+                                    paths.clear()
+                                    RsyncSocket.rsyncItem(
+                                        NoteOperation.CleanElement(
+                                            id = System.currentTimeMillis().toString()
+                                        )
+                                    )
+                                }
+                            }, onColorChanged = {
+                                optionConfig = optionConfig.copy(color = it)
+                            }, onWidthChanged = {
+                                optionConfig = optionConfig.copy(width = it)
+                            })
                     }
                 }
             }

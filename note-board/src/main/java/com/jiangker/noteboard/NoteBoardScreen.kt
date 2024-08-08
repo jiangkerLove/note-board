@@ -2,36 +2,18 @@ package com.jiangker.noteboard
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
@@ -46,10 +28,6 @@ import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.github.barteksc.pdfviewer.PDFView
 import kotlin.math.max
 import kotlin.math.min
@@ -80,26 +58,26 @@ interface NoteBoardScreenState {
 @SuppressLint("ResourceType")
 @Composable
 fun NoteBoardScreen(
+    config: OptionConfig,
     onPathDown: (Color, Float) -> Unit,
     onPathMove: (Offset) -> Unit,
     onPathUp: (PathItem) -> Unit,
-    onClean: () -> Unit,
     onEraser: (List<String>) -> Unit,
     paths: List<PathItem>,
     noteState: NoteBoardScreenState,
-    content: @Composable BoxScope.(Modifier) -> Unit
+    content: @Composable BoxScope.(Modifier) -> Unit,
+    optionContent: @Composable BoxScope.(Modifier) -> Unit
 ) {
     var boxRect by remember { mutableStateOf(Rect.Zero) }
-    val context = LocalContext.current
     val path = remember { mutableStateListOf<Offset>() }
     var isFirstMove = false
     var paintId by remember { mutableStateOf<PointerId?>(null) }
 
-    var pathColor by remember { mutableStateOf(Color.Red) }
-    var pathWidth by remember { mutableFloatStateOf(5F) }
-    var isClean by remember { mutableStateOf(false) }
-    var showSelectColor by remember { mutableStateOf(false) }
-    var showSelectWith by remember { mutableStateOf(false) }
+    var optConfig by remember { mutableStateOf(config) }
+
+    LaunchedEffect(key1 = config) {
+        optConfig = config
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         content(Modifier
@@ -113,8 +91,8 @@ fun NoteBoardScreen(
                                     isFirstMove = true
                                     path.clear()
                                     paintId = pointerEvent.changes.first().id
-                                    if (isClean.not())
-                                        onPathDown(pathColor, pathWidth)
+                                    if (optConfig.isClean.not())
+                                        onPathDown(optConfig.color, optConfig.width)
                                 }
                             }
 
@@ -145,14 +123,14 @@ fun NoteBoardScreen(
                                         (it.position.x - noteState.offsetX) / noteState.scale,
                                         (it.position.y - noteState.offsetY) / noteState.scale
                                     )
-                                    if (isClean.not()) {
+                                    if (optConfig.isClean.not()) {
                                         onPathMove(offset)
                                     }
                                     path.add(offset)
                                 }
                             if (pointerEvent.type == PointerEventType.Release && pointerEvent.changes.size == 1) {
                                 if (path.isNotEmpty())
-                                    if (isClean) {
+                                    if (optConfig.isClean) {
                                         val offsetY = noteState.offsetY / noteState.scale
                                         if (path.size > 2) {
                                             val itemList = paths
@@ -172,8 +150,8 @@ fun NoteBoardScreen(
                                         onPathUp(
                                             PathItem(
                                                 id = "",
-                                                color = pathColor,
-                                                width = pathWidth,
+                                                color = optConfig.color,
+                                                width = optConfig.width,
                                                 path.toList(),
                                             )
                                         )
@@ -213,10 +191,10 @@ fun NoteBoardScreen(
                                 item.positions
                             )
                     }
-                    if (isClean.not()) {
+                    if (optConfig.isClean.not()) {
                         it.drawPathWithOffset(
-                            pathColor,
-                            pathWidth,
+                            optConfig.color,
+                            optConfig.width,
                             path,
                         )
                     } else {
@@ -232,147 +210,7 @@ fun NoteBoardScreen(
                     it.restore()
                 }
             })
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .background(color = Color.Gray)
-                .padding(10.dp)
-        ) {
-            Column(
-                modifier = Modifier.clickable {
-                    onClean()
-                }
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_clean),
-                    contentDescription = null
-                )
-                Text(text = "清除", modifier = Modifier, fontSize = 12.sp, color = Color.White)
-            }
-            Spacer(modifier = Modifier.width(20.dp))
-
-            Column(
-                modifier = Modifier.clickable {
-                    showSelectColor = true
-                }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .background(color = pathColor)
-                )
-
-                Text(text = "颜色", modifier = Modifier, fontSize = 12.sp, color = Color.White)
-            }
-
-            Spacer(modifier = Modifier.width(20.dp))
-
-
-            Column(
-                modifier = Modifier.clickable {
-                    showSelectWith = true
-                }
-            ) {
-                Box(modifier = Modifier.size(30.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        modifier = Modifier
-                            .size(pathWidth.dp)
-                            .clip(CircleShape)
-                            .background(color = pathColor)
-                    )
-                }
-                Text(text = "画笔大小", modifier = Modifier, fontSize = 12.sp, color = Color.White)
-            }
-
-            Spacer(modifier = Modifier.width(20.dp))
-
-            Column(
-                modifier = Modifier.clickable {
-                    isClean = true
-                }
-            ) {
-                Image(
-                    painter = painterResource(id = if (isClean) R.drawable.ic_eraser_select else R.drawable.ic_eraser),
-                    contentDescription = null
-                )
-                Text(text = "橡皮", modifier = Modifier, fontSize = 12.sp, color = Color.White)
-            }
-            Spacer(modifier = Modifier.width(20.dp))
-            Column(
-                modifier = Modifier.clickable {
-                    isClean = false
-                }
-            ) {
-                Image(
-                    painter = painterResource(id = if (isClean) R.drawable.ic_pen else R.drawable.ic_pen_select),
-                    contentDescription = null
-                )
-                Text(text = "画笔", modifier = Modifier, fontSize = 12.sp, color = Color.White)
-            }
-            Spacer(modifier = Modifier.width(20.dp))
-            Column(
-                modifier = Modifier.clickable {
-                    PDFUtil.write(
-                        basePath = context.filesDir.path,
-                        boxRect.width.roundToInt(),
-                        paths
-                    )
-                }
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_save),
-                    contentDescription = null
-                )
-                Text(text = "保存", modifier = Modifier, fontSize = 12.sp, color = Color.White)
-            }
-        }
-
-        if (showSelectColor) {
-            Column(modifier = Modifier
-                .fillMaxSize()
-                .clickable { showSelectColor = false }) {
-                Spacer(modifier = Modifier.height(70.dp))
-                Row(
-                    modifier = Modifier
-                        .wrapContentSize()
-                        .background(Color.Gray)
-                ) {
-                    listOf(Color.Red, Color.Blue, Color.Green).forEach {
-                        Box(modifier = Modifier
-                            .padding(10.dp)
-                            .size(30.dp)
-                            .background(it)
-                            .clickable {
-                                pathColor = it
-                                showSelectColor = false
-                            })
-                    }
-                }
-            }
-        }
-
-        if (showSelectWith) {
-            Column(modifier = Modifier
-                .fillMaxSize()
-                .clickable { showSelectWith = false }) {
-                Spacer(modifier = Modifier.height(70.dp))
-                Row(
-                    modifier = Modifier
-                        .wrapContentHeight()
-                        .width(500.dp)
-                        .background(Color.Gray)
-                ) {
-                    Slider(
-                        value = pathWidth,
-                        onValueChange = { pathWidth = it },
-                        steps = 11,
-                        valueRange = 2f..20f
-                    )
-                }
-            }
-        }
+        optionContent(Modifier)
     }
 }
 
