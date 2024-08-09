@@ -9,5 +9,6 @@ java {
 }
 
 dependencies {
-    api("com.google.code.gson:gson:2.10")
+    implementation("io.netty:netty-all:4.1.68.Final")
+    implementation(project(":common"))
 }

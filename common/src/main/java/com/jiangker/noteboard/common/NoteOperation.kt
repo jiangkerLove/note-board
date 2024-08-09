@@ -9,17 +9,20 @@ sealed class NoteElement(
         val color: ULong,
         val width: Float,
         val poss: List<Pos>,
-        val writing: Boolean,
     ) : NoteElement("Line") {
         override fun update(element: NoteElement): NoteElement {
             val line = element as Line
             val mutableList = poss.toMutableList()
             mutableList.addAll(line.poss)
-            return copy(color = line.color, width = line.width, poss = mutableList, writing = line.writing)
+            return copy(
+                color = line.color,
+                width = line.width,
+                poss = mutableList,
+            )
         }
     }
 
-    abstract fun update(element: NoteElement):NoteElement
+    abstract fun update(element: NoteElement): NoteElement
 }
 
 sealed class NoteOperation(
@@ -29,11 +32,15 @@ sealed class NoteOperation(
 
     data class AddElement(
         val element: NoteElement,
-        override val id: String
+        override val id: String,
+        val writing: Boolean,
     ) : NoteOperation("Add") {
         override fun update(operation: NoteOperation): NoteOperation {
             val addElement = (operation as AddElement).element
-            return copy(element = element.update(addElement))
+            return copy(
+                element = element.update(addElement),
+                writing = operation.writing
+            )
         }
     }
 
@@ -53,5 +60,5 @@ sealed class NoteOperation(
         }
     }
 
-    abstract fun update(operation: NoteOperation):NoteOperation
+    abstract fun update(operation: NoteOperation): NoteOperation
 }

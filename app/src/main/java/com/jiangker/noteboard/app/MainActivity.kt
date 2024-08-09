@@ -94,7 +94,10 @@ class MainActivity : ComponentActivity() {
                                         }
 
                                         is NoteOperation.CleanElement -> {
+                                            val writingList =
+                                                mutableList.filter { it.writing }.toList()
                                             mutableList.clear()
+                                            mutableList.addAll(writingList)
                                         }
 
                                         is NoteOperation.RemoveElement -> {
@@ -126,8 +129,8 @@ class MainActivity : ComponentActivity() {
                                     color.value,
                                     width = fl,
                                     poss = mutableListOf(),
-                                    true
-                                )
+                                ),
+                                writing = true
                             )
                             currentOpt?.let { RsyncSocket.rsyncItem(it) }
                         },
@@ -150,9 +153,9 @@ class MainActivity : ComponentActivity() {
                             RsyncSocket.rsyncItem(
                                 element.copy(
                                     element = (element.element as NoteElement.Line).copy(
-                                        writing = false,
                                         poss = mutableListOf()
-                                    )
+                                    ),
+                                    writing = false
                                 )
                             )
                             synchronized(MainActivity::class) {
@@ -187,7 +190,9 @@ class MainActivity : ComponentActivity() {
                                 optionConfig = optionConfig.copy(isClean = it)
                             }, onClean = {
                                 synchronized(MainActivity::class) {
+                                    val newList = paths.filter { it.writing }.toList()
                                     paths.clear()
+                                    paths.addAll(newList)
                                     RsyncSocket.rsyncItem(
                                         NoteOperation.CleanElement(
                                             id = System.currentTimeMillis().toString()

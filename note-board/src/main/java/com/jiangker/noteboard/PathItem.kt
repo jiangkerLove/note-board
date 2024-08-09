@@ -48,7 +48,7 @@ fun PathItem.update(opera: NoteOperation.AddElement, pageWidth: Int): PathItem {
             }
             val mutableList = positions.toMutableList()
             mutableList.addAll(posList)
-            copy(writing = line.writing, positions = mutableList)
+            copy(writing = opera.writing, positions = mutableList)
         }
     }
 }
@@ -67,7 +67,7 @@ fun NoteOperation.AddElement.toPathItem(pageWidth: Int): PathItem {
                         it.y * pageWidth
                     )
                 },
-                writing = line.writing
+                writing = writing
             )
         }
     }
