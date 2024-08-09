@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "note-board"
 include(":app")
 include(":note-board")
+include(":common")

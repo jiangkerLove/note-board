@@ -1,8 +1,8 @@
 import com.google.gson.JsonDeserializationContext
 import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
-import com.jiangker.noteboard.NoteElement
-import com.jiangker.noteboard.NoteOperation
+import com.jiangker.noteboard.common.NoteElement
+import com.jiangker.noteboard.common.NoteOperation
 import java.lang.reflect.Type
 
 class NoteDeserializer : JsonDeserializer<NoteOperation> {

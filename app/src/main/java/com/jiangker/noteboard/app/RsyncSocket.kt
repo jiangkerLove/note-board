@@ -4,21 +4,18 @@ import ElementDeserializer
 import NoteDeserializer
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.jiangker.noteboard.NoteElement
-import com.jiangker.noteboard.NoteOperation
+import com.jiangker.noteboard.common.NoteElement
+import com.jiangker.noteboard.common.NoteOperation
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -27,9 +24,11 @@ object RsyncSocket {
     private val rsyncScope =
         CoroutineScope(Executors.newSingleThreadExecutor().asCoroutineDispatcher())
 
-    private val cacheOpt = CopyOnWriteArrayList<NoteOperation>()
+    private val cacheOpt = mutableListOf<NoteOperation>()
 
     private var newWebSocket: WebSocket? = null
+
+    private var sending = false
 
     private val gson =
         Gson().newBuilder().registerTypeAdapter(NoteOperation::class.java, NoteDeserializer())
@@ -38,7 +37,6 @@ object RsyncSocket {
     val sharedFlow = MutableSharedFlow<List<NoteOperation>>()
 
     init {
-        printItem()
         connect()
     }
 
@@ -61,6 +59,7 @@ object RsyncSocket {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 super.onOpen(webSocket, response)
                 println("open")
+                webSocket.send("[]")
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -85,34 +84,28 @@ object RsyncSocket {
 
     private fun printItem() {
         rsyncScope.launch {
-            val oldList = cacheOpt.toList()
-            withContext(Dispatchers.IO) {
-                val message = gson.toJson(oldList)
-                println(message)
-                newWebSocket?.send(message)
+            if (cacheOpt.isNotEmpty()) {
+                val message = gson.toJson(cacheOpt)
+                if(newWebSocket?.send(message) == true) {
+                    cacheOpt.clear()
+                }
             }
-            oldList.forEach {
-                cacheOpt.remove(it)
-            }
-            if (cacheOpt.isEmpty()) {
-                delay(50)
-            }
-            printItem()
+            sending = false
         }
     }
 
 
     fun rsyncItem(operation: NoteOperation) {
         rsyncScope.launch {
-            if (cacheOpt.isNotEmpty()) {
-                val last = cacheOpt.last()
-                if (last.id == operation.id) {
-                    cacheOpt[cacheOpt.size - 1] = operation
-                } else {
-                    cacheOpt.add(operation)
-                }
+            val index = cacheOpt.indexOfLast { it.id == operation.id }
+            if (index != -1) {
+                cacheOpt[index] = cacheOpt[index].update(operation)
             } else {
                 cacheOpt.add(operation)
+            }
+            if (sending.not()) {
+                sending = true
+                printItem()
             }
         }
     }

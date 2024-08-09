@@ -17,23 +17,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import com.github.barteksc.pdfviewer.PDFView
 import com.jiangker.noteboard.NoteBoardScreen
-import com.jiangker.noteboard.NoteElement
-import com.jiangker.noteboard.NoteOperation
 import com.jiangker.noteboard.NoteSource
 import com.jiangker.noteboard.OptionConfig
 import com.jiangker.noteboard.OptionScreen
 import com.jiangker.noteboard.PDFScreen
 import com.jiangker.noteboard.PathItem
-import com.jiangker.noteboard.Pos
 import com.jiangker.noteboard.R
 import com.jiangker.noteboard.app.ui.theme.NoteboardTheme
+import com.jiangker.noteboard.common.NoteElement
+import com.jiangker.noteboard.common.NoteOperation
 import com.jiangker.noteboard.rememberNoteBoardScreenState
+import com.jiangker.noteboard.toPathItem
+import com.jiangker.noteboard.update
 import org.xmlpull.v1.XmlPullParser
 
 class MainActivity : ComponentActivity() {
@@ -58,6 +58,10 @@ class MainActivity : ComponentActivity() {
                 }
                 var currentOpt: NoteOperation? = null
 
+                val pageWidth = remember {
+                    resources.displayMetrics.widthPixels
+                }
+
                 val pdfView = remember {
                     val resources = context.resources
 
@@ -75,58 +79,31 @@ class MainActivity : ComponentActivity() {
                     RsyncSocket.sharedFlow.collect { list ->
                         synchronized(MainActivity::class) {
                             runCatching {
-                                val newList = list.toMutableList()
                                 val mutableList = paths.toMutableList()
-                                for (i in mutableList.indices) {
-                                    newList.find { mutableList[i].id == it.id }?.let {
-                                        if (it is NoteOperation.AddElement) {
-                                            val line = it.element as NoteElement.Line
-                                            mutableList[i] = PathItem(
-                                                id = it.id,
-                                                color = Color(line.color),
-                                                width = line.width,
-                                                positions = line.poss.map {
-                                                    Offset(
-                                                        it.x * pdfView.width,
-                                                        it.y * pdfView.width
-                                                    )
-                                                }
-                                            )
-                                            newList.remove(it)
-                                        }
-                                    }
-                                }
-                                if (newList.isNotEmpty()) {
-                                    newList.forEach { operation ->
-                                        when (operation) {
-                                            is NoteOperation.AddElement -> {
-                                                val line = (operation.element as NoteElement.Line)
-                                                mutableList.add(PathItem(
-                                                    id = operation.id,
-                                                    color = Color(line.color),
-                                                    width = line.width,
-                                                    positions = line.poss.map {
-                                                        Offset(
-                                                            it.x * pdfView.width,
-                                                            it.y * pdfView.width
-                                                        )
-                                                    }
-                                                ))
-                                            }
-
-                                            is NoteOperation.CleanElement -> {
-                                                mutableList.clear()
-                                            }
-
-                                            is NoteOperation.RemoveElement -> {
-                                                val pathItems =
-                                                    mutableList.filter { it.id != operation.id }
-                                                        .toList()
-                                                mutableList.clear()
-                                                mutableList.addAll(pathItems)
+                                list.forEach { opera ->
+                                    val index =
+                                        mutableList.indexOfLast { item -> item.id == opera.id }
+                                    when (opera) {
+                                        is NoteOperation.AddElement -> {
+                                            if (index == -1) {
+                                                mutableList.add(opera.toPathItem(pageWidth))
+                                            } else {
+                                                mutableList[index] =
+                                                    mutableList[index].update(opera, pageWidth)
                                             }
                                         }
 
+                                        is NoteOperation.CleanElement -> {
+                                            mutableList.clear()
+                                        }
+
+                                        is NoteOperation.RemoveElement -> {
+                                            if (index != -1) {
+                                                mutableList.removeAt(index)
+                                            }
+                                        }
+
+                                        else -> {}
                                     }
                                 }
                                 paths.clear()
@@ -148,7 +125,7 @@ class MainActivity : ComponentActivity() {
                                 element = NoteElement.Line(
                                     color.value,
                                     width = fl,
-                                    poss = emptyList(),
+                                    poss = mutableListOf(),
                                     true
                                 )
                             )
@@ -156,12 +133,15 @@ class MainActivity : ComponentActivity() {
                         },
                         onPathMove = { off ->
                             val element = currentOpt as NoteOperation.AddElement
-                            val line =
-                                (element.element as NoteElement.Line).poss.toMutableList()
-
-                            line.add(Pos(off.x / pdfView.width, off.y / pdfView.width))
                             currentOpt = element.copy(
-                                element = (element.element as NoteElement.Line).copy(poss = line)
+                                element = (element.element as NoteElement.Line).copy(
+                                    poss = mutableListOf(
+                                        com.jiangker.noteboard.common.Pos(
+                                            off.x / pdfView.width,
+                                            off.y / pdfView.width
+                                        )
+                                    )
+                                )
                             )
                             currentOpt?.let { RsyncSocket.rsyncItem(it) }
                         },
@@ -169,7 +149,10 @@ class MainActivity : ComponentActivity() {
                             val element = currentOpt as NoteOperation.AddElement
                             RsyncSocket.rsyncItem(
                                 element.copy(
-                                    element = (element.element as NoteElement.Line).copy(writing = false)
+                                    element = (element.element as NoteElement.Line).copy(
+                                        writing = false,
+                                        poss = mutableListOf()
+                                    )
                                 )
                             )
                             synchronized(MainActivity::class) {

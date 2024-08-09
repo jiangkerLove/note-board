@@ -31,7 +31,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import com.github.barteksc.pdfviewer.PDFView
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 @Composable
 fun rememberNoteBoardScreenState(pdfView: PDFView): NoteBoardScreenState {
@@ -135,7 +134,7 @@ fun NoteBoardScreen(
                                         if (path.size > 2) {
                                             val itemList = paths
                                                 .filter { item ->
-                                                    item.bottom + offsetY >= 0 && item.top + offsetY <= boxRect.height &&
+                                                    item.writing.not() && item.bottom + offsetY >= 0 && item.top + offsetY <= boxRect.height &&
                                                             inCleanSpace(
                                                                 path.first(),
                                                                 path.last(),
@@ -152,7 +151,8 @@ fun NoteBoardScreen(
                                                 id = "",
                                                 color = optConfig.color,
                                                 width = optConfig.width,
-                                                path.toList(),
+                                                positions = path.toList(),
+                                                writing = false
                                             )
                                         )
                                     }
